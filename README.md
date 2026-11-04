@@ -25,3 +25,21 @@ npm run preview  # serve the production build
 
 `dist/` is a static site with relative asset paths, so you can host it anywhere:
 GitHub Pages, Netlify, Vercel, S3 or any static file server.
+
+## Android app (APK)
+
+The app is wrapped for Android with [Capacitor](https://capacitorjs.com/), and the native project is in `android/`.
+
+- **CI build:** every push runs `.github/workflows/android.yml`, which builds a debug APK.
+  Download it from the workflow run's **Artifacts** section (`momentum-planner-apk`).
+  Pushing a tag like `v1.0.0` also attaches the APK to a GitHub Release.
+- **Local build** (needs JDK 21 and the Android SDK):
+  ```bash
+  npm run build && npx cap sync android
+  cd android && ./gradlew assembleDebug
+  # -> android/app/build/outputs/apk/debug/app-debug.apk
+  ```
+- **Install:** copy the APK to your phone and open it. Allow "Install unknown apps" if Android asks.
+
+The APK is a debug build, signed with a debug key, so it's for sideloading only. Publishing on
+Google Play needs a release keystore and `assembleRelease` or `bundleRelease`.

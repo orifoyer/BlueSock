@@ -1,0 +1,8 @@
+{
+  "appId": "com.momentum.planner",
+  "appName": "Momentum",
+  "webDir": "dist",
+  "android": {
+    "adjustMarginsForEdgeToEdge": "auto"
+  }
+}
