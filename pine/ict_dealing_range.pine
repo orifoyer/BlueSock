@@ -1,0 +1,247 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// Clean-room implementation of an ICT Dealing Range indicator (Short / Intermediate / Long term)
+// built from public ICT market-structure concepts. Not derived from any protected source code.
+//@version=6
+indicator("ICT Dealing Range [BlueSock]", "ICT DR [BlueSock]", overlay = true, max_lines_count = 500, max_labels_count = 500, max_boxes_count = 100, max_bars_back = 5000)
+
+// ───────────────────────────── Inputs ─────────────────────────────
+const string G_DR  = "Dealing Range ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+const string G_FIB = "Fib Levels ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+const string G_TR  = "Trace Lines ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+const string G_DSP = "Display ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+const string G_ADV = "Advanced ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+const string S_SOLID = "⎯⎯⎯"
+const string S_DASH  = "----"
+const string S_DOT   = "····"
+
+showST = input.bool(false, "Short Term Levels",        group = G_DR, tooltip = "Range between the latest short-term swing high and low (3-bar fractal).")
+showIT = input.bool(true,  "Intermediate Term Levels", group = G_DR, tooltip = "Range between the latest intermediate-term swings (a short-term swing with lower/higher short-term swings on both sides).")
+showLT = input.bool(false, "Long Term Levels",         group = G_DR, tooltip = "Range between the latest long-term swings (an intermediate swing with lower/higher intermediate swings on both sides).")
+
+useLog = input.bool(true, "Use Log scale for calculations", group = G_FIB)
+
+f1On = input.bool(true,  "", inline = "f1", group = G_FIB), f1 = input.float(0.0,   "", inline = "f1", group = G_FIB), f1C = input.color(#4CAF50, "", inline = "f1", group = G_FIB), f1S = input.string(S_SOLID, "", [S_SOLID, S_DASH, S_DOT], inline = "f1", group = G_FIB), f1W = input.int(2, "", options = [1, 2, 3, 4], inline = "f1", group = G_FIB)
+f2On = input.bool(true,  "", inline = "f2", group = G_FIB), f2 = input.float(0.5,   "", inline = "f2", group = G_FIB), f2C = input.color(#4CAF50, "", inline = "f2", group = G_FIB), f2S = input.string(S_SOLID, "", [S_SOLID, S_DASH, S_DOT], inline = "f2", group = G_FIB), f2W = input.int(1, "", options = [1, 2, 3, 4], inline = "f2", group = G_FIB)
+f3On = input.bool(true,  "", inline = "f3", group = G_FIB), f3 = input.float(0.618, "", inline = "f3", group = G_FIB), f3C = input.color(#F23645, "", inline = "f3", group = G_FIB), f3S = input.string(S_DOT,   "", [S_SOLID, S_DASH, S_DOT], inline = "f3", group = G_FIB), f3W = input.int(1, "", options = [1, 2, 3, 4], inline = "f3", group = G_FIB)
+f4On = input.bool(true,  "", inline = "f4", group = G_FIB), f4 = input.float(0.786, "", inline = "f4", group = G_FIB), f4C = input.color(#9C27B0, "", inline = "f4", group = G_FIB), f4S = input.string(S_DOT,   "", [S_SOLID, S_DASH, S_DOT], inline = "f4", group = G_FIB), f4W = input.int(1, "", options = [1, 2, 3, 4], inline = "f4", group = G_FIB)
+f5On = input.bool(true,  "", inline = "f5", group = G_FIB), f5 = input.float(1.0,   "", inline = "f5", group = G_FIB), f5C = input.color(#9C27B0, "", inline = "f5", group = G_FIB), f5S = input.string(S_SOLID, "", [S_SOLID, S_DASH, S_DOT], inline = "f5", group = G_FIB), f5W = input.int(2, "", options = [1, 2, 3, 4], inline = "f5", group = G_FIB)
+f6On = input.bool(false, "", inline = "f6", group = G_FIB), f6 = input.float(-1.0,  "", inline = "f6", group = G_FIB), f6C = input.color(#787B86, "", inline = "f6", group = G_FIB), f6S = input.string(S_DOT,   "", [S_SOLID, S_DASH, S_DOT], inline = "f6", group = G_FIB), f6W = input.int(1, "", options = [1, 2, 3, 4], inline = "f6", group = G_FIB)
+f7On = input.bool(false, "", inline = "f7", group = G_FIB), f7 = input.float(-2.0,  "", inline = "f7", group = G_FIB), f7C = input.color(#787B86, "", inline = "f7", group = G_FIB), f7S = input.string(S_SOLID, "", [S_SOLID, S_DASH, S_DOT], inline = "f7", group = G_FIB), f7W = input.int(2, "", options = [1, 2, 3, 4], inline = "f7", group = G_FIB)
+f8On = input.bool(false, "", inline = "f8", group = G_FIB), f8 = input.float(-3.0,  "", inline = "f8", group = G_FIB), f8C = input.color(#787B86, "", inline = "f8", group = G_FIB), f8S = input.string(S_DOT,   "", [S_SOLID, S_DASH, S_DOT], inline = "f8", group = G_FIB), f8W = input.int(1, "", options = [1, 2, 3, 4], inline = "f8", group = G_FIB)
+
+showTrace = input.bool(true, "Trace Lines", group = G_TR, tooltip = "Lines from the swing candles that anchor each range to the range drawn on the right. 'Open' traces the leg's origin (level 1), 'Close' traces the leg's end (level 0).")
+trOC = input.color(#9C27B0, "Open",  inline = "tro", group = G_TR), trOS = input.string(S_DOT, "", [S_SOLID, S_DASH, S_DOT], inline = "tro", group = G_TR), trOW = input.int(1, "", options = [1, 2, 3, 4], inline = "tro", group = G_TR)
+trCC = input.color(#4CAF50, "Close", inline = "trc", group = G_TR), trCS = input.string(S_DOT, "", [S_SOLID, S_DASH, S_DOT], inline = "trc", group = G_TR), trCW = input.int(1, "", options = [1, 2, 3, 4], inline = "trc", group = G_TR)
+
+invert   = input.bool(false, "Invert display order", group = G_DSP, tooltip = "Default order left→right is Short, Intermediate, Long.")
+bgOn     = input.bool(true, "Background transparency    ", inline = "bg", group = G_DSP)
+bgTransp = input.int(85, "", options = [99, 97, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50], inline = "bg", group = G_DSP)
+fibPad   = input.int(1, "Fib levels padding", minval = 0, group = G_DSP, tooltip = "Bars each fib line extends past the range box on both sides.")
+lblSizeS = input.string("tiny", "Label size", ["tiny", "small", "normal", "large", "huge"], group = G_DSP)
+showLvl  = input.bool(true,  "Level value", group = G_DSP)
+showPx   = input.bool(false, "Price value", group = G_DSP)
+dist     = input.int(5, "Distance from current candles", minval = 0, group = G_DSP)
+drWidth  = input.int(4, "Dealing Range width", minval = 1, group = G_DSP)
+drSpace  = input.int(4, "Spacing between Dealing Ranges", minval = 0, group = G_DSP)
+
+lookback = input.int(1000, "Lookback period (performance)", minval = 50, group = G_ADV, tooltip = "Swings older than this many bars are ignored.")
+
+// ───────────────────────────── Helpers ─────────────────────────────
+lineStyle(string s) =>
+    s == S_DASH ? line.style_dashed : s == S_DOT ? line.style_dotted : line.style_solid
+
+lblSize(string s) =>
+    switch s
+        "small"  => size.small
+        "normal" => size.normal
+        "large"  => size.large
+        "huge"   => size.huge
+        => size.tiny
+
+// Price at fib level `lvl` for a range whose level-0 anchor is p0 and level-1 anchor is p1.
+fibPrice(float p0, float p1, float lvl) =>
+    useLog and p0 > 0 and p1 > 0 ? math.exp(math.log(p0) + lvl * (math.log(p1) - math.log(p0))) : p0 + lvl * (p1 - p0)
+
+// ──────────────────────── Swing hierarchy ────────────────────────
+// A dealing range for one term: latest swing high / low of that term, extended
+// with the running extreme when price trades through it.
+type Range
+    float hi = na
+    int   hiB = na
+    float lo = na
+    int   loB = na
+
+type SwingSeq
+    array<float> p
+    array<int>   b
+
+newSeq() => SwingSeq.new(array.new<float>(), array.new<int>())
+
+push(SwingSeq s, float p, int b) =>
+    s.p.push(p)
+    s.b.push(b)
+    if s.p.size() > 50
+        s.p.shift()
+        s.b.shift()
+
+// When a new swing is appended, test whether the previous one is a higher-order swing.
+// isHigh: higher than both neighbours; else lower than both. Returns [found, price, bar].
+promote(SwingSeq s, bool isHigh) =>
+    bool  ok = false
+    float p  = na
+    int   b  = na
+    int n = s.p.size()
+    if n >= 3
+        float l = s.p.get(n - 3), m = s.p.get(n - 2), r = s.p.get(n - 1)
+        if isHigh ? (m > l and m > r) : (m < l and m < r)
+            ok := true
+            p  := m
+            b  := s.b.get(n - 2)
+    [ok, p, b]
+
+var SwingSeq stH = newSeq(), var SwingSeq stL = newSeq()
+var SwingSeq itH = newSeq(), var SwingSeq itL = newSeq()
+var Range rST = Range.new(), var Range rIT = Range.new(), var Range rLT = Range.new()
+
+setHigh(Range r, float p, int b) =>
+    r.hi  := p
+    r.hiB := b
+
+setLow(Range r, float p, int b) =>
+    r.lo  := p
+    r.loB := b
+
+// Short-term swing: 3-bar fractal, confirmed one bar later.
+float ph = ta.pivothigh(high, 1, 1)
+float pl = ta.pivotlow(low, 1, 1)
+bool inWindow = bar_index >= last_bar_index - lookback
+
+// Range boundaries before this bar's update (used for break alerts).
+float pST_hi = rST.hi, float pST_lo = rST.lo
+float pIT_hi = rIT.hi, float pIT_lo = rIT.lo
+float pLT_hi = rLT.hi, float pLT_lo = rLT.lo
+
+if inWindow
+    if not na(ph)
+        push(stH, ph, bar_index - 1)
+        setHigh(rST, ph, bar_index - 1)
+        [ok1, p1, b1] = promote(stH, true)
+        if ok1
+            push(itH, p1, b1)
+            setHigh(rIT, p1, b1)
+            [ok2, p2, b2] = promote(itH, true)
+            if ok2
+                setHigh(rLT, p2, b2)
+    if not na(pl)
+        push(stL, pl, bar_index - 1)
+        setLow(rST, pl, bar_index - 1)
+        [ok1, p1, b1] = promote(stL, false)
+        if ok1
+            push(itL, p1, b1)
+            setLow(rIT, p1, b1)
+            [ok2, p2, b2] = promote(itL, false)
+            if ok2
+                setLow(rLT, p2, b2)
+    // Range expansion: price trading through a boundary moves that anchor to the new extreme.
+    for r in array.from(rST, rIT, rLT)
+        if not na(r.hi) and high > r.hi
+            setHigh(r, high, bar_index)
+        if not na(r.lo) and low < r.lo
+            setLow(r, low, bar_index)
+
+// Level-0 anchor is the most recent extreme of the leg (bullish leg: high; bearish leg: low).
+anchors(Range r) =>
+    bool bull = r.hiB > r.loB
+    [bull ? r.hi : r.lo, bull ? r.lo : r.hi, bull ? r.hiB : r.loB, bull ? r.loB : r.hiB, bull]
+
+// ──────────────────────────── Alerts ────────────────────────────
+// Evaluated every bar (global scope) for consistent cross detection.
+eqST = not na(rST.hi) and not na(rST.lo) ? fibPrice(rST.hi, rST.lo, 0.5) : na
+eqIT = not na(rIT.hi) and not na(rIT.lo) ? fibPrice(rIT.hi, rIT.lo, 0.5) : na
+eqLT = not na(rLT.hi) and not na(rLT.lo) ? fibPrice(rLT.hi, rLT.lo, 0.5) : na
+xST = ta.cross(close, eqST), xIT = ta.cross(close, eqIT), xLT = ta.cross(close, eqLT)
+bST_up = inWindow and not na(pST_hi) and high > pST_hi, bST_dn = inWindow and not na(pST_lo) and low < pST_lo
+bIT_up = inWindow and not na(pIT_hi) and high > pIT_hi, bIT_dn = inWindow and not na(pIT_lo) and low < pIT_lo
+bLT_up = inWindow and not na(pLT_hi) and high > pLT_hi, bLT_dn = inWindow and not na(pLT_lo) and low < pLT_lo
+
+// Data-window values (no visual footprint on the chart).
+plot(rST.hi, "ST High", display = display.data_window), plot(rST.lo, "ST Low", display = display.data_window), plot(eqST, "ST EQ", display = display.data_window)
+plot(rIT.hi, "IT High", display = display.data_window), plot(rIT.lo, "IT Low", display = display.data_window), plot(eqIT, "IT EQ", display = display.data_window)
+plot(rLT.hi, "LT High", display = display.data_window), plot(rLT.lo, "LT Low", display = display.data_window), plot(eqLT, "LT EQ", display = display.data_window)
+
+alertcondition(xST, "ST equilibrium cross", "Price crossed the Short Term dealing range equilibrium")
+alertcondition(xIT, "IT equilibrium cross", "Price crossed the Intermediate Term dealing range equilibrium")
+alertcondition(xLT, "LT equilibrium cross", "Price crossed the Long Term dealing range equilibrium")
+alertcondition(bST_up or bST_dn, "ST range break", "Price broke the Short Term dealing range")
+alertcondition(bIT_up or bIT_dn, "IT range break", "Price broke the Intermediate Term dealing range")
+alertcondition(bLT_up or bLT_dn, "LT range break", "Price broke the Long Term dealing range")
+
+// ──────────────────────────── Drawing ────────────────────────────
+var array<line>  gLines  = array.new<line>()
+var array<label> gLabels = array.new<label>()
+var array<box>   gBoxes  = array.new<box>()
+
+clearAll() =>
+    for l in gLines
+        l.delete()
+    for l in gLabels
+        l.delete()
+    for b in gBoxes
+        b.delete()
+    gLines.clear()
+    gLabels.clear()
+    gBoxes.clear()
+
+drawLevel(float p0, float p1, float lvl, color c, string st, int w, int x1, int x2, string sz) =>
+    float y = fibPrice(p0, p1, lvl)
+    gLines.push(line.new(x1 - fibPad, y, x2 + fibPad, y, color = c, style = lineStyle(st), width = w))
+    if showLvl or showPx
+        string t = (showLvl ? str.tostring(lvl) : "") + (showLvl and showPx ? " (" : "") + (showPx ? str.tostring(y, format.mintick) : "") + (showLvl and showPx ? ")" : "")
+        gLabels.push(label.new(x2 + fibPad, y, t, color = color(na), textcolor = c, style = label.style_label_left, size = sz))
+
+drawRange(Range r, string name, int x1) =>
+    if not na(r.hi) and not na(r.lo) and r.hi > r.lo
+        [p0, p1, b0, b1, bull] = anchors(r)
+        int x2 = x1 + drWidth
+        string sz = lblSize(lblSizeS)
+        float eq = fibPrice(p0, p1, 0.5)
+        if bgOn
+            gBoxes.push(box.new(x1, r.hi, x2, eq, border_color = color(na), bgcolor = color.new(#F23645, bgTransp)))
+            gBoxes.push(box.new(x1, eq, x2, r.lo, border_color = color(na), bgcolor = color.new(#089981, bgTransp)))
+        if showTrace
+            gLines.push(line.new(b1, p1, x1, p1, color = trOC, style = lineStyle(trOS), width = trOW))
+            gLines.push(line.new(b0, p0, x1, p0, color = trCC, style = lineStyle(trCS), width = trCW))
+        if f1On
+            drawLevel(p0, p1, f1, f1C, f1S, f1W, x1, x2, sz)
+        if f2On
+            drawLevel(p0, p1, f2, f2C, f2S, f2W, x1, x2, sz)
+        if f3On
+            drawLevel(p0, p1, f3, f3C, f3S, f3W, x1, x2, sz)
+        if f4On
+            drawLevel(p0, p1, f4, f4C, f4S, f4W, x1, x2, sz)
+        if f5On
+            drawLevel(p0, p1, f5, f5C, f5S, f5W, x1, x2, sz)
+        if f6On
+            drawLevel(p0, p1, f6, f6C, f6S, f6W, x1, x2, sz)
+        if f7On
+            drawLevel(p0, p1, f7, f7C, f7S, f7W, x1, x2, sz)
+        if f8On
+            drawLevel(p0, p1, f8, f8C, f8S, f8W, x1, x2, sz)
+        gLabels.push(label.new(int(math.round((x1 + x2) / 2)), math.max(r.hi, fibPrice(p0, p1, math.min(f6On ? f6 : 0, f7On ? f7 : 0, f8On ? f8 : 0))), name + (bull ? " ▲" : " ▼"), color = color(na), textcolor = chart.fg_color, style = label.style_label_down, size = sz))
+
+if barstate.islast
+    clearAll()
+    array<Range>  rs = array.new<Range>()
+    array<string> ns = array.new<string>()
+    if showST
+        rs.push(rST), ns.push("STL")
+    if showIT
+        rs.push(rIT), ns.push("ITL")
+    if showLT
+        rs.push(rLT), ns.push("LTL")
+    if invert
+        rs.reverse(), ns.reverse()
+    int x = bar_index + dist
+    for [i, r] in rs
+        drawRange(r, ns.get(i), x)
+        x += drWidth + drSpace
