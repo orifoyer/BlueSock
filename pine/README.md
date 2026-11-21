@@ -9,6 +9,8 @@ public input list served as the spec.
   (higher for lows) ST swings on both sides. Long-term = the same rule applied to IT swings.
 - **Dealing range per term:** the latest swing high and swing low of that term. When price trades
   through a boundary, that boundary moves to the new extreme.
+- **Level 1 anchor** (setting): "C2 Open" (default) puts level 1 at the open of c2, the candle after the
+  origin swing candle c1. "Swing High/Low" puts it on the swing extreme.
 - **Fib orientation:** level 0 is the most recent extreme of the leg and level 1 is its origin. So in a
   bullish leg 0.618/0.786 sit in discount, and the negative levels (-1/-2/-3) project beyond the leg.
 - **Log scale** option for the fib math (default on).

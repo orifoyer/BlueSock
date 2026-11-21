@@ -19,6 +19,9 @@ showIT = input.bool(true,  "Intermediate Term Levels", group = G_DR, tooltip = "
 showLT = input.bool(false, "Long Term Levels",         group = G_DR, tooltip = "Range between the latest long-term swings (an intermediate swing with lower/higher intermediate swings on both sides).")
 
 useLog = input.bool(true, "Use Log scale for calculations", group = G_FIB)
+const string A_C2  = "C2 Open"
+const string A_EXT = "Swing High/Low"
+anchor1 = input.string(A_C2, "Level 1 anchor", [A_C2, A_EXT], group = G_FIB, tooltip = "C2 Open: level 1 sits at the open of c2, the candle after the origin swing candle (c1).\nSwing High/Low: level 1 sits on the origin swing's high/low.")
 
 f1On = input.bool(true,  "", inline = "f1", group = G_FIB), f1 = input.float(0.0,   "", inline = "f1", group = G_FIB), f1C = input.color(#4CAF50, "", inline = "f1", group = G_FIB), f1S = input.string(S_SOLID, "", [S_SOLID, S_DASH, S_DOT], inline = "f1", group = G_FIB), f1W = input.int(2, "", options = [1, 2, 3, 4], inline = "f1", group = G_FIB)
 f2On = input.bool(true,  "", inline = "f2", group = G_FIB), f2 = input.float(0.5,   "", inline = "f2", group = G_FIB), f2C = input.color(#4CAF50, "", inline = "f2", group = G_FIB), f2S = input.string(S_SOLID, "", [S_SOLID, S_DASH, S_DOT], inline = "f2", group = G_FIB), f2W = input.int(1, "", options = [1, 2, 3, 4], inline = "f2", group = G_FIB)
@@ -150,15 +153,29 @@ if inWindow
             setLow(r, low, bar_index)
 
 // Level-0 anchor is the most recent extreme of the leg (bullish leg: high; bearish leg: low).
+// Level-1 anchor is the leg's origin: the swing's high/low, or the open of c2 (the candle after the origin swing candle c1).
 anchors(Range r) =>
-    bool bull = r.hiB > r.loB
-    [bull ? r.hi : r.lo, bull ? r.lo : r.hi, bull ? r.hiB : r.loB, bull ? r.loB : r.hiB, bull]
+    float p0 = na, float p1 = na, int b0 = na, int b1 = na, bool bull = false
+    if not na(r.hi) and not na(r.lo)
+        bull := r.hiB > r.loB
+        p0 := bull ? r.hi : r.lo
+        b0 := bull ? r.hiB : r.loB
+        b1 := bull ? r.loB : r.hiB
+        p1 := bull ? r.lo : r.hi
+        if anchor1 == A_C2 and b1 + 1 <= bar_index
+            b1 += 1
+            p1 := open[bar_index - b1]
+    [p0, p1, b0, b1, bull]
+
+[st0, st1, stB0, stB1, stBull] = anchors(rST)
+[it0, it1, itB0, itB1, itBull] = anchors(rIT)
+[lt0, lt1, ltB0, ltB1, ltBull] = anchors(rLT)
 
 // ──────────────────────────── Alerts ────────────────────────────
 // Evaluated every bar (global scope) for consistent cross detection.
-eqST = not na(rST.hi) and not na(rST.lo) ? fibPrice(rST.hi, rST.lo, 0.5) : na
-eqIT = not na(rIT.hi) and not na(rIT.lo) ? fibPrice(rIT.hi, rIT.lo, 0.5) : na
-eqLT = not na(rLT.hi) and not na(rLT.lo) ? fibPrice(rLT.hi, rLT.lo, 0.5) : na
+eqST = not na(st0) and not na(st1) ? fibPrice(st0, st1, 0.5) : na
+eqIT = not na(it0) and not na(it1) ? fibPrice(it0, it1, 0.5) : na
+eqLT = not na(lt0) and not na(lt1) ? fibPrice(lt0, lt1, 0.5) : na
 xST = ta.cross(close, eqST), xIT = ta.cross(close, eqIT), xLT = ta.cross(close, eqLT)
 bST_up = inWindow and not na(pST_hi) and high > pST_hi, bST_dn = inWindow and not na(pST_lo) and low < pST_lo
 bIT_up = inWindow and not na(pIT_hi) and high > pIT_hi, bIT_dn = inWindow and not na(pIT_lo) and low < pIT_lo
@@ -199,15 +216,15 @@ drawLevel(float p0, float p1, float lvl, color c, string st, int w, int x1, int 
         string t = (showLvl ? str.tostring(lvl) : "") + (showLvl and showPx ? " (" : "") + (showPx ? str.tostring(y, format.mintick) : "") + (showLvl and showPx ? ")" : "")
         gLabels.push(label.new(x2 + fibPad, y, t, color = color(na), textcolor = c, style = label.style_label_left, size = sz))
 
-drawRange(Range r, string name, int x1) =>
-    if not na(r.hi) and not na(r.lo) and r.hi > r.lo
-        [p0, p1, b0, b1, bull] = anchors(r)
+drawRange(float p0, float p1, int b0, int b1, bool bull, string name, int x1) =>
+    if not na(p0) and not na(p1) and p0 != p1
+        float top = math.max(p0, p1), float bot = math.min(p0, p1)
         int x2 = x1 + drWidth
         string sz = lblSize(lblSizeS)
         float eq = fibPrice(p0, p1, 0.5)
         if bgOn
-            gBoxes.push(box.new(x1, r.hi, x2, eq, border_color = color(na), bgcolor = color.new(#F23645, bgTransp)))
-            gBoxes.push(box.new(x1, eq, x2, r.lo, border_color = color(na), bgcolor = color.new(#089981, bgTransp)))
+            gBoxes.push(box.new(x1, top, x2, eq, border_color = color(na), bgcolor = color.new(#F23645, bgTransp)))
+            gBoxes.push(box.new(x1, eq, x2, bot, border_color = color(na), bgcolor = color.new(#089981, bgTransp)))
         if showTrace
             gLines.push(line.new(b1, p1, x1, p1, color = trOC, style = lineStyle(trOS), width = trOW))
             gLines.push(line.new(b0, p0, x1, p0, color = trCC, style = lineStyle(trCS), width = trCW))
@@ -227,21 +244,17 @@ drawRange(Range r, string name, int x1) =>
             drawLevel(p0, p1, f7, f7C, f7S, f7W, x1, x2, sz)
         if f8On
             drawLevel(p0, p1, f8, f8C, f8S, f8W, x1, x2, sz)
-        gLabels.push(label.new(int(math.round((x1 + x2) / 2)), math.max(r.hi, fibPrice(p0, p1, math.min(f6On ? f6 : 0, f7On ? f7 : 0, f8On ? f8 : 0))), name + (bull ? " ▲" : " ▼"), color = color(na), textcolor = chart.fg_color, style = label.style_label_down, size = sz))
+        gLabels.push(label.new(int(math.round((x1 + x2) / 2)), math.max(top, fibPrice(p0, p1, math.min(f6On ? f6 : 0, f7On ? f7 : 0, f8On ? f8 : 0))), name + (bull ? " ▲" : " ▼"), color = color(na), textcolor = chart.fg_color, style = label.style_label_down, size = sz))
 
 if barstate.islast
     clearAll()
-    array<Range>  rs = array.new<Range>()
-    array<string> ns = array.new<string>()
-    if showST
-        rs.push(rST), ns.push("STL")
-    if showIT
-        rs.push(rIT), ns.push("ITL")
-    if showLT
-        rs.push(rLT), ns.push("LTL")
-    if invert
-        rs.reverse(), ns.reverse()
+    array<int> order = invert ? array.from(2, 1, 0) : array.from(0, 1, 2)
     int x = bar_index + dist
-    for [i, r] in rs
-        drawRange(r, ns.get(i), x)
-        x += drWidth + drSpace
+    for k in order
+        bool on = k == 0 ? showST : k == 1 ? showIT : showLT
+        if on
+            switch k
+                0 => drawRange(st0, st1, stB0, stB1, stBull, "STL", x)
+                1 => drawRange(it0, it1, itB0, itB1, itBull, "ITL", x)
+                => drawRange(lt0, lt1, ltB0, ltB1, ltBull, "LTL", x)
+            x += drWidth + drSpace
